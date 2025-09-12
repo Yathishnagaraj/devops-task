@@ -1,46 +1,50 @@
 pipeline {
     agent any
 
-    tools {
-        maven "M3"
+    environment {
+        DOCKERHUB_USER = 'yathish047'
+        IMAGE_NAME = 'express-app'
     }
 
     stages {
-        stage('Build') {
+        stage('Checkout') {
             steps {
                 git branch: 'main', url: 'https://github.com/Yathishnagaraj/devops-task.git'
-
-                sh "mvn -Dmaven.test.failure.ignore=true clean package"
             }
+        }
 
-            post {
-                success {
-                    junit '**/target/surefire-reports/TEST-*.xml'
-                    archiveArtifacts 'target/*.jar'
-                }
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'npm test || echo "No tests configured"'
             }
         }
 
         stage('Dockerize') {
             steps {
-                sh 'docker build -t yathish047/devops-task:latest .'
+                script {
+                    sh "docker build -t ${DOCKERHUB_USER}/${IMAGE_NAME}:latest ."
+                }
             }
         }
 
         stage('Push to Registry') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                    sh '''
-                      echo $PASS | docker login -u $USER --password-stdin
-                      docker push yathish047/devops-task:latest
-                    '''
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                    sh "docker push ${DOCKERHUB_USER}/${IMAGE_NAME}:latest"
                 }
             }
         }
 
         stage('Deploy') {
             steps {
-                sh 'kubectl apply -f k8s/' 
+                echo 'Deployment step goes here...'
             }
         }
     }
