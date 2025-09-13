@@ -46,12 +46,10 @@ pipeline {
 
         stage('Pre-Deployment Check') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-eks-creds'
-                ]]) {
+                withCredentials([usernamePassword(credentialsId: 'aws-eks-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     sh '''
-                    aws eks update-kubeconfig --name unique-pop-pumpkin --region us-east-1 --kubeconfig $KUBECONFIG
+                    export AWS_DEFAULT_REGION=us-east-1
+                    aws eks update-kubeconfig --name unique-pop-pumpkin --kubeconfig $KUBECONFIG
                     if ! kubectl --kubeconfig=$KUBECONFIG -n kube-system get configmap aws-auth -o yaml | grep -q "$JENKINS_IAM_USER"; then
                         echo "ERROR: Jenkins IAM user not found in aws-auth ConfigMap!"
                         exit 1
@@ -63,11 +61,9 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-eks-creds'
-                ]]) {
+                withCredentials([usernamePassword(credentialsId: 'aws-eks-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     sh '''
+                    export AWS_DEFAULT_REGION=us-east-1
                     sed -i "s|IMAGE_PLACEHOLDER|$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG|g" k8s/deployment.yaml
                     kubectl --kubeconfig=$KUBECONFIG apply -f k8s/deployment.yaml
                     kubectl --kubeconfig=$KUBECONFIG apply -f k8s/service.yaml
