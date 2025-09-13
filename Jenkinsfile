@@ -35,18 +35,19 @@ pipeline {
 
         stage('Push to Registry') {
             steps {
-                echo "Skipping Docker push for public image"
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                    sh 'echo $PASSWORD | docker login -u $USERNAME --password-stdin'
+                    sh "docker push $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+                }
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
                 sh '''
-                mkdir -p $HOME/.kube
-                kubectl get deployment logo-server -n ${K8S_NAMESPACE} || \
-                kubectl create deployment logo-server --image=${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -n ${K8S_NAMESPACE}
-                kubectl set image deployment/logo-server logo-server=${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -n ${K8S_NAMESPACE}
-                kubectl rollout status deployment/logo-server -n ${K8S_NAMESPACE}
+                sed -i "s|IMAGE_PLACEHOLDER|$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG|g" k8s/deployment.yaml
+                kubectl apply -f k8s/deployment.yaml
+                kubectl apply -f k8s/service.yaml
                 '''
             }
         }
