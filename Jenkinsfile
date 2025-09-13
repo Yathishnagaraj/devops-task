@@ -4,7 +4,8 @@ pipeline {
     environment {
         DOCKER_REGISTRY = "yathish047"
         IMAGE_NAME = "logo-server"
-        KUBECONFIG_PATH = "$HOME/.kube/config"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        K8S_NAMESPACE = "default"
     }
 
     stages {
@@ -28,31 +29,25 @@ pipeline {
 
         stage('Dockerize') {
             steps {
-                sh "docker build -t $DOCKER_REGISTRY/$IMAGE_NAME:$BUILD_NUMBER ."
+                sh "docker build -t $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG ."
             }
         }
 
         stage('Push to Registry') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
-                                                 usernameVariable: 'USERNAME',
-                                                 passwordVariable: 'PASSWORD')]) {
-                    sh 'echo $PASSWORD | docker login -u $USERNAME --password-stdin'
-                    sh "docker push $DOCKER_REGISTRY/$IMAGE_NAME:$BUILD_NUMBER"
-                }
+                echo "Skipping Docker push for public image"
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([string(credentialsId: 'kubeconfig', variable: 'KUBECONFIG_CONTENT')]) {
-                    sh '''
-                    mkdir -p $HOME/.kube
-                    echo "$KUBECONFIG_CONTENT" > $HOME/.kube/config
-                    kubectl set image deployment/logo-server logo-server=$DOCKER_REGISTRY/$IMAGE_NAME:$BUILD_NUMBER -n default
-                    kubectl rollout status deployment/logo-server -n default
-                    '''
-                }
+                sh '''
+                mkdir -p $HOME/.kube
+                kubectl get deployment logo-server -n ${K8S_NAMESPACE} || \
+                kubectl create deployment logo-server --image=${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -n ${K8S_NAMESPACE}
+                kubectl set image deployment/logo-server logo-server=${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} -n ${K8S_NAMESPACE}
+                kubectl rollout status deployment/logo-server -n ${K8S_NAMESPACE}
+                '''
             }
         }
     }
