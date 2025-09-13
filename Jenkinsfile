@@ -42,13 +42,21 @@ pipeline {
             }
         }
 
-        stage('Deploy to ECS') {
+        stage('Deploy to Kubernetes') {
+            agent {
+                docker {
+                    image 'bitnami/kubectl:latest'
+                }
+            }
+            environment {
+                KUBECONFIG_CONTENT = credentials('kubeconfig-credentials-id')
+            }
             steps {
                 sh '''
-                aws ecs update-service \
-                  --cluster logo-cluster \
-                  --service logo-service \
-                  --force-new-deployment
+                mkdir -p $HOME/.kube
+                echo "$KUBECONFIG_CONTENT" > $HOME/.kube/config
+                kubectl set image deployment/logo-server logo-server=$DOCKER_REGISTRY/$IMAGE_NAME:$BUILD_NUMBER -n default
+                kubectl rollout status deployment/logo-server -n default
                 '''
             }
         }
