@@ -2,18 +2,18 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_USER = 'yathish047'
-        IMAGE_NAME = 'express-app'
+        DOCKER_REGISTRY = "yathish047"
+        IMAGE_NAME = "logo-server"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/Yathishnagaraj/devops-task.git'
+                git branch: 'dev', url: 'https://github.com/Yathishnagaraj/devops-task.git'
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Build') {
             steps {
                 sh 'npm install'
             }
@@ -21,30 +21,35 @@ pipeline {
 
         stage('Test') {
             steps {
-                sh 'npm test || echo "No tests configured"'
+                sh 'npm test || echo "No tests defined, skipping..."'
             }
         }
 
         stage('Dockerize') {
             steps {
-                script {
-                    sh "docker build -t ${DOCKERHUB_USER}/${IMAGE_NAME}:latest ."
-                }
+                sh "docker build -t $DOCKER_REGISTRY/$IMAGE_NAME:$BUILD_NUMBER ."
             }
         }
 
         stage('Push to Registry') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
-                    sh "docker push ${DOCKERHUB_USER}/${IMAGE_NAME}:latest"
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                                                 usernameVariable: 'USERNAME',
+                                                 passwordVariable: 'PASSWORD')]) {
+                    sh 'echo $PASSWORD | docker login -u $USERNAME --password-stdin'
+                    sh "docker push $DOCKER_REGISTRY/$IMAGE_NAME:$BUILD_NUMBER"
                 }
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy to ECS') {
             steps {
-                echo 'Deployment step goes here...'
+                sh '''
+                aws ecs update-service \
+                  --cluster logo-cluster \
+                  --service logo-service \
+                  --force-new-deployment
+                '''
             }
         }
     }
