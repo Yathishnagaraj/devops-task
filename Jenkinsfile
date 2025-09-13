@@ -48,8 +48,13 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'aws-eks-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     sh '''
                     export AWS_DEFAULT_REGION=us-east-1
+                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+
                     aws eks update-kubeconfig --name unique-pop-pumpkin --kubeconfig "$KUBECONFIG"
+
                     sed -i "s|IMAGE_PLACEHOLDER|$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG|g" k8s/deployment.yaml
+
                     kubectl --kubeconfig="$KUBECONFIG" apply -f k8s/deployment.yaml
                     kubectl --kubeconfig="$KUBECONFIG" apply -f k8s/service.yaml
                     '''
