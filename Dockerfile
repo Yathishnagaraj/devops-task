@@ -1,9 +1,9 @@
 FROM node:18-alpine
+
 WORKDIR /app
 COPY package*.json ./
-ARG NODE_ENV=production
-ENV NODE_ENV=$NODE_ENV
-RUN npm install
+RUN npm install --production
 COPY . .
-EXPOSE 3000
+ENV PORT=3050
+EXPOSE 3050
 CMD ["npm", "start"]
