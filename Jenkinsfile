@@ -6,7 +6,7 @@ pipeline {
         IMAGE_NAME = "logo-server"
         IMAGE_TAG = "${BUILD_NUMBER}"
         K8S_NAMESPACE = "default"
-        KUBECONFIG = "${WORKSPACE}/kubeconfig"
+        KUBECONFIG_FILE = "${WORKSPACE}/kubeconfig"
     }
 
     stages {
@@ -30,33 +30,31 @@ pipeline {
 
         stage('Dockerize') {
             steps {
-                sh "docker build -t \"$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG\" ."
+                sh 'docker build -t "$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG" .'
             }
         }
 
         stage('Push to Registry') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh 'echo "$PASSWORD" | docker login -u "$USERNAME" --password-stdin'
-                    sh "docker push \"$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG\""
+                    sh '''
+                        echo "$PASSWORD" | docker login -u "$USERNAME" --password-stdin
+                        docker push "$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+                    '''
                 }
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'aws-eks-creds', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
                     sh '''
-                    export AWS_DEFAULT_REGION=us-east-1
-                    export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-                    export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-
-                    aws eks update-kubeconfig --name unique-pop-pumpkin --kubeconfig "$KUBECONFIG"
-
-                    sed -i "s|IMAGE_PLACEHOLDER|$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG|g" k8s/deployment.yaml
-
-                    kubectl --kubeconfig="$KUBECONFIG" apply -f k8s/deployment.yaml
-                    kubectl --kubeconfig="$KUBECONFIG" apply -f k8s/service.yaml
+                        export AWS_DEFAULT_REGION=us-east-1
+                        aws eks update-kubeconfig --name unique-pop-pumpkin --region $AWS_DEFAULT_REGION --kubeconfig "$KUBECONFIG_FILE"
+                        kubectl --kubeconfig="$KUBECONFIG_FILE" get nodes
+                        sed -i "s|IMAGE_PLACEHOLDER|$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG|g" k8s/deployment.yaml
+                        kubectl --kubeconfig="$KUBECONFIG_FILE" apply -f k8s/deployment.yaml --validate=false
+                        kubectl --kubeconfig="$KUBECONFIG_FILE" apply -f k8s/service.yaml --validate=false
                     '''
                 }
             }
