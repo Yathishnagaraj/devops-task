@@ -2,61 +2,43 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY = "yathish047"
-        IMAGE_NAME = "logo-server"
-        IMAGE_TAG = "${BUILD_NUMBER}"
-        K8S_NAMESPACE = "default"
-        KUBECONFIG_FILE = "${WORKSPACE}/kubeconfig"
+        DOCKER_IMAGE = "yathish047/Swayatt-LOGO"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/Yathishnagaraj/devops-task.git'
+                git branch: 'dev', url: 'https://github.com/Yathishnagaraj/devops-task'
             }
         }
 
         stage('Build') {
             steps {
                 sh 'npm install'
-            }
-        }
-
-        stage('Test') {
-            steps {
-                sh 'npm test || echo "No tests defined, skipping..."'
+                sh 'npm test || echo "No tests found"'
             }
         }
 
         stage('Dockerize') {
             steps {
-                sh 'docker build -t "$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG" .'
+                sh 'docker build -t $DOCKER_IMAGE:$BUILD_NUMBER .'
             }
         }
 
         stage('Push to Registry') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh '''
-                        echo "$PASSWORD" | docker login -u "$USERNAME" --password-stdin
-                        docker push "$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
-                    '''
+                withDockerRegistry([credentialsId: 'dockerhub-creds', url: '']) {
+                    sh 'docker push $DOCKER_IMAGE:$BUILD_NUMBER'
                 }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Deploy') {
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
-                    sh '''
-                        export AWS_DEFAULT_REGION=us-east-1
-                        aws eks update-kubeconfig --name unique-pop-pumpkin --region $AWS_DEFAULT_REGION --kubeconfig "$KUBECONFIG_FILE"
-                        kubectl --kubeconfig="$KUBECONFIG_FILE" get nodes
-                        sed -i "s|IMAGE_PLACEHOLDER|$DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG|g" k8s/deployment.yaml
-                        kubectl --kubeconfig="$KUBECONFIG_FILE" apply -f k8s/deployment.yaml --validate=false
-                        kubectl --kubeconfig="$KUBECONFIG_FILE" apply -f k8s/service.yaml --validate=false
-                    '''
-                }
+                sh '''
+                docker rm -f logo-container || true
+                docker run -d -p 80:3000 --name logo-container $DOCKER_IMAGE:$BUILD_NUMBER
+                '''
             }
         }
     }
